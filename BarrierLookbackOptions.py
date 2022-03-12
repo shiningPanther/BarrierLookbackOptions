@@ -14,7 +14,7 @@ class OptionPricer:
         self.T = T
         self.dt = dt
         self.antithetic = antithetic
-        self.possible_option_types = ['VanillaCall, VanillaPut, LookBackCall, UpAndOutCall']
+        self.possible_option_types = ['VanillaCall', 'VanillaPut', 'LookBackCall', 'UpAndOutCall']
 
     def simulate_paths(self, N):
         counter = 0
@@ -26,18 +26,17 @@ class OptionPricer:
             self._gather_statistics(paths)
             counter = counter + 1 if not self.antithetic else counter + 2
 
-    def calculate_price(self, option_type, **kwargs):
+    def calculate_price(self, option_type, K):
         if option_type not in self.possible_option_types:
             print('Invalid option type')
             return
+        if not self.statistics:
+            print('Simulate paths first')
+            return
         stats = pd.DataFrame(self.statistics)
-        print(stats)
         if option_type == 'VanillaCall':
-            pass
-
-
-
-
+            ST = stats.ST.values
+            return np.maximum(ST - K, 0).mean()
 
     def _simulate_one_path(self):
 
@@ -50,22 +49,20 @@ class OptionPricer:
         x_list = [_simulate_GBM(normal_rv)]
         if not self.antithetic:
             return x_list
-        normal_rv = -normal_rv
-        x_list.append(_simulate_GBM(normal_rv))
-        plt.plot(x_list[0])
-        plt.plot(x_list[1])
+        x_list.append(_simulate_GBM(-normal_rv))
         return x_list
 
     def _gather_statistics(self, paths):
-        d = {}
         for path in paths:
-            d['ST'] = path[-1]  # final value
-            d['min'] = np.min(path)
-            d['argmin'] = np.argmin(path)
-            d['max'] = np.max(path)
-            d['argmax'] = np.argmax(path)
+            d = {'ST': path[-1],
+                 'min': np.min(path),
+                 'argmin': np.argmin(path),
+                 'max': np.max(path),
+                 'argmax': np.argmax(path)}
             self.statistics.append(d)
 
-option = OptionPricer(x0=100, r=0.05, sigma=0.4, T=1, dt=0.0001)
-option.simulate_paths(1)
+
+option = OptionPricer(x0=100, r=0.05, sigma=0.4, T=1, dt=0.001, antithetic=True)
+option.simulate_paths(100_000)
+print(option.calculate_price('VanillaCall', 100))
 
