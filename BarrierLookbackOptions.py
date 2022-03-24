@@ -28,34 +28,32 @@ class OptionPricer:
         payoffs = np.zeros(N)
         while counter < N:
             paths = self._simulate_one_path()
-            
+            if counter % 100 == 0:
+                self.paths.append(paths[0])
             for path in paths:
                 payoffs[counter] = self._get_payoff(path, option_type, **kwargs)
-                self.paths.append(path)
                 counter += 1
         payoffs *= self.discount
         ci_d, ci_u = self._bootstrap(payoffs)
-        return payoffs, ci_d, ci_u
+        return payoffs.mean(), ci_d, ci_u
 
     def calculate_delta_likelihood_ratio(self, option_type, N, **kwargs):
         if option_type not in self.possible_option_types:
             print('Invalid option type')
             return
-        counter = 0
-        deltas = []
-        for _ in tqdm(range(N)):
+        deltas = np.zeros(N)
+        for i in tqdm(range(N)):
             paths = self._simulate_one_path()
             payoff1 = self._get_payoff(paths[0], option_type, **kwargs)
             payoff2 = self._get_payoff(paths[1], option_type, **kwargs)
             delta1 = payoff1*self.rvs[-2][0]/(self.s0*self.sigma*np.sqrt(self.dt))
             delta2 = payoff2*self.rvs[-1][0]/(self.s0*self.sigma*np.sqrt(self.dt))
-            deltas.append(delta1)
-            deltas.append(delta2)
-            counter += 2
-
+            deltas[i] = delta1
+            deltas[i] = delta2
+        deltas *= self.discount
         d_l, d_u = self._bootstrap(deltas)
-        
-        return deltas, d_l, d_u
+        deltas_mean = deltas.mean()
+        return deltas_mean, deltas_mean + d_l, deltas_mean + d_u
 
     def calculate_delta_finite_difference(self, option_type, N, dS0, **kwargs):
         if option_type not in self.possible_option_types:
@@ -114,13 +112,13 @@ class OptionPricer:
         ci_d, ci_u = self._bootstrap(payoff_diffs)
         return payoff_diffs.mean(), ci_d, ci_u
 
-    def _bootstrap(self, values):
-        N = 1000
-        L = len(values)
+    def _bootstrap(self, values, N=1_000):
+        mean_ = values.mean()
+        L = values.shape[0]
         bootstraps = np.zeros(N)
         for i in tqdm(range(N)):
             bootstraps[i] = np.random.choice(values, size=L, replace=True).mean()
-        return np.quantile(bootstraps, 0.05), np.quantile(bootstraps, 0.95)
+        return np.quantile(bootstraps - mean_, 0.05), np.quantile(bootstraps - mean_, 0.95)
 
     def _get_payoff(self, path, option_type, **kwargs):
         if option_type == 'VanillaCall':
@@ -210,66 +208,76 @@ class OptionPricer:
         return s_list
 
 
-# N = 10_000
+# N_finite_difference = 10_000
+# N_likelihood_ratio = 500_000
 # option_params = {'K': 100,
 #                  'B_up': 200,
 #                  'B_down': 80}
-
-# np.random.seed(0)
-# option_type = 'LookBackCall'
-
-
-# def plot_fill_plot(x_vals, y_vals, ax):
-#     y_mid = [y_val[0] for y_val in y_vals]
-#     y_up = [y_val[1] for y_val in y_vals]
-#     y_down = [y_val[2] for y_val in y_vals]
-#     ax.plot(x_vals, y_mid)
-#     ax.fill_between(x_vals, y_up, y_down, color='blue', alpha=0.1)
-
-    
-
+#
+# np.random.seed(1)
+# option_type = 'UpAndOutCall'
+#
+#
+# def plot_fill_plot(x_vals, y_vals, ax, color):
+#     alpha = 0.2 if color == 'red' else 0.1
+#     if isinstance(y_vals, list):
+#         y_mid = [y_val[0] for y_val in y_vals]
+#         y_up = [y_val[1] for y_val in y_vals]
+#         y_down = [y_val[2] for y_val in y_vals]
+#     else:
+#         y_mid = [y_vals[0]] * len(x_vals)
+#         y_up = [y_vals[1]] * len(x_vals)
+#         y_down = [y_vals[2]] * len(x_vals)
+#     ax.plot(x_vals, y_mid, color=color)
+#     ax.fill_between(x_vals, y_up, y_down, color=color, alpha=alpha)
+#
+#
 # dt_arr = np.logspace(-5, -2, 12)
 # prices = []
 # for dt in tqdm(dt_arr):
 #     option = OptionPricer(s0=100, r=0.05, sigma=0.4, T=1, dt=dt)
-#     prices.append(option.calculate_price(option_type, N, **option_params))
-
+#     prices.append(option.calculate_price(option_type, N_finite_difference, **option_params))
+#
 # fig, ax = plt.subplots()
 # plot_fill_plot(dt_arr, prices, ax)
 # ax.hlines(10.8842, 1e-5, 1e-2, color='green', linestyle='dashed')
 # ax.set_xscale('log')
-
+#
 # option = OptionPricer(s0=100, r=0.05, sigma=0.4, T=1, dt=0.0001)
 # dS0_arr = np.logspace(-2, 2, 13)
 # deltas = []
 # for dS0 in tqdm(dS0_arr):
-#     deltas.append(option.calculate_delta(option_type, N, dS0=dS0, **option_params))
-
+#     deltas.append(option.calculate_delta_finite_difference(option_type, N_finite_difference, dS0=dS0, **option_params))
+#
+# option = OptionPricer(s0=100, r=0.05, sigma=0.4, T=1, dt=0.001)
+# deltas_likelihood = option.calculate_delta_likelihood_ratio(option_type, N_likelihood_ratio, **option_params)
+#
 # fig, ax = plt.subplots()
-# plot_fill_plot(dS0_arr, deltas, ax)
+# plot_fill_plot(dS0_arr, deltas, ax, color='blue')
+# plot_fill_plot(dS0_arr, deltas_likelihood, ax, color='red')
 # ax.hlines(0.2289, 1e-2, 1e2, color='green', linestyle='dashed')
 # ax.set_xscale('log')
-
+#
 # dS0_arr = np.logspace(-2, 2, 13)
 # gammas = []
 # for dS0 in tqdm(dS0_arr):
 #     gammas.append(option.calculate_gamma(option_type, N, dS0=dS0, **option_params))
-
+#
 # fig, ax = plt.subplots()
 # plot_fill_plot(dS0_arr, gammas, ax)
 # ax.hlines(-0.0050, 1e-2, 1e2, color='green', linestyle='dashed')
 # ax.set_xscale('log')
-
+#
 # dsigma_arr = np.logspace(-3, -1, 10)
 # vegas = []
 # for dsigma in tqdm(dsigma_arr):
 #     vegas.append(option.calculate_vega(option_type, N, dsigma=dsigma, **option_params))
-
+#
 # fig, ax = plt.subplots()
 # plot_fill_plot(dsigma_arr, vegas, ax)
 # ax.hlines(-20.09, 1e-3, 1e-1, color='green', linestyle='dashed')
 # ax.set_xscale('log')
-
+#
 # fig, ax = plt.subplots(1,4,figsize=(14,8))
 # plot_fill_plot(dt_arr, prices, ax[0])
 # # ax[0].hlines(10.8842, 1e-5, 1e-2, color='green', linestyle='dashed')
@@ -283,118 +291,22 @@ class OptionPricer:
 # plot_fill_plot(dsigma_arr, vegas, ax[3])
 # # ax[3].hlines(-20.09, 1e-3, 1e-1, color='green', linestyle='dashed')
 # ax[3].set_xscale('log')
-
+#
 # ax[0].set_ylabel('price'); ax[0].set_xlabel('dt'); ax[0].set_title('price')
 # ax[1].set_ylabel('delta'); ax[1].set_xlabel('d$S_0$'); ax[1].set_title('delta')
 # ax[2].set_ylabel('gamma'); ax[2].set_xlabel('d$S_0$'); ax[2].set_title('gamma')
 # ax[3].set_ylabel('vega'); ax[3].set_xlabel('d$\sigma$'); ax[3].set_title('vega')
-
+#
 # plt.tight_layout()
 # fig.savefig(f'{option_type}.pdf', format='pdf')
-
-
+#
+# asdf
+#
+#
 # prices = option.calculate_price('UpAndOutCall', N, **option_params)
 # deltas = option.calculate_delta('UpAndOutCall', N, dS0=1, **option_params)
 # gammas = option.calculate_gamma('UpAndOutCall', N, dS0=1, **option_params)
 # vegas = option.calculate_vega('UpAndOutCall', N, dsigma=0.1, **option_params)
-
-# print(f'The UpAndOut call price is {round(prices[0],2)} with 95% CI ({round(prices[1],2)}, {round(prices[2],2)})')
-# print(f'The UpAndOut delta is {round(deltas[0],2)} with 95% CI ({round(deltas[1],2)}, {round(deltas[2],2)})')
-# print(f'The UpAndOut gamma is {round(gammas[0],2)} with 95% CI ({round(gammas[1],2)}, {round(gammas[2],2)})')
-# print(f'The UpAndOut vega is {round(vegas[0],2)} with 95% CI ({round(vegas[1],2)}, {round(vegas[2],2)})')
-
-
-
-    
-N = 10_000
-option_params = {'K': 100,
-                 'B_up': 200,
-                 'B_down': 80}
-
-np.random.seed(0)
-option_type = 'LookBackCall'
-
-
-def plot_fill_plot(x_vals, y_vals, ax):
-    y_mid = [y_val[0] for y_val in y_vals]
-    y_up = [y_val[1] for y_val in y_vals]
-    y_down = [y_val[2] for y_val in y_vals]
-    ax.plot(x_vals, y_mid)
-    ax.fill_between(x_vals, y_up, y_down, color='blue', alpha=0.1)
-
-    
-
-dt_arr = np.logspace(-5, -2, 12)
-prices = []
-for dt in tqdm(dt_arr):
-    option = OptionPricer(s0=100, r=0.05, sigma=0.4, T=1, dt=dt)
-    prices.append(option.calculate_price(option_type, N, **option_params))
-
-fig, ax = plt.subplots()
-plot_fill_plot(dt_arr, prices, ax)
-ax.hlines(10.8842, 1e-5, 1e-2, color='green', linestyle='dashed')
-ax.set_xscale('log')
-
-option = OptionPricer(s0=100, r=0.05, sigma=0.4, T=1, dt=0.0001)
-dS0_arr = np.logspace(-2, 2, 13)
-deltas = []
-for dS0 in tqdm(dS0_arr):
-    deltas.append(option.calculate_delta(option_type, N, dS0=dS0, **option_params))
-
-fig, ax = plt.subplots()
-plot_fill_plot(dS0_arr, deltas, ax)
-ax.hlines(0.2289, 1e-2, 1e2, color='green', linestyle='dashed')
-ax.set_xscale('log')
-
-dS0_arr = np.logspace(-2, 2, 13)
-gammas = []
-for dS0 in tqdm(dS0_arr):
-    gammas.append(option.calculate_gamma(option_type, N, dS0=dS0, **option_params))
-
-fig, ax = plt.subplots()
-plot_fill_plot(dS0_arr, gammas, ax)
-ax.hlines(-0.0050, 1e-2, 1e2, color='green', linestyle='dashed')
-ax.set_xscale('log')
-
-dsigma_arr = np.logspace(-3, -1, 10)
-vegas = []
-for dsigma in tqdm(dsigma_arr):
-    vegas.append(option.calculate_vega(option_type, N, dsigma=dsigma, **option_params))
-
-fig, ax = plt.subplots()
-plot_fill_plot(dsigma_arr, vegas, ax)
-ax.hlines(-20.09, 1e-3, 1e-1, color='green', linestyle='dashed')
-ax.set_xscale('log')
-
-fig, ax = plt.subplots(1,4,figsize=(14,8))
-plot_fill_plot(dt_arr, prices, ax[0])
-# ax[0].hlines(10.8842, 1e-5, 1e-2, color='green', linestyle='dashed')
-ax[0].set_xscale('log')
-plot_fill_plot(dS0_arr, deltas, ax[1])
-# ax[1].hlines(0.2289, 1e-2, 1e2, color='green', linestyle='dashed')
-ax[1].set_xscale('log')
-plot_fill_plot(dS0_arr, gammas, ax[2])
-# ax[2].hlines(-0.0050, 1e-2, 1e2, color='green', linestyle='dashed')
-ax[2].set_xscale('log')
-plot_fill_plot(dsigma_arr, vegas, ax[3])
-# ax[3].hlines(-20.09, 1e-3, 1e-1, color='green', linestyle='dashed')
-ax[3].set_xscale('log')
-
-ax[0].set_ylabel('price'); ax[0].set_xlabel('dt'); ax[0].set_title('price')
-ax[1].set_ylabel('delta'); ax[1].set_xlabel('d$S_0$'); ax[1].set_title('delta')
-ax[2].set_ylabel('gamma'); ax[2].set_xlabel('d$S_0$'); ax[2].set_title('gamma')
-ax[3].set_ylabel('vega'); ax[3].set_xlabel('d$\sigma$'); ax[3].set_title('vega')
-
-plt.tight_layout()
-fig.savefig(f'{option_type}.pdf', format='pdf')
-
-asdf
-
-
-prices = option.calculate_price('UpAndOutCall', N, **option_params)
-deltas = option.calculate_delta('UpAndOutCall', N, dS0=1, **option_params)
-gammas = option.calculate_gamma('UpAndOutCall', N, dS0=1, **option_params)
-vegas = option.calculate_vega('UpAndOutCall', N, dsigma=0.1, **option_params)
 
 
 
