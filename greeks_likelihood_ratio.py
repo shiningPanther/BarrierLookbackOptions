@@ -11,10 +11,10 @@ results = pd.DataFrame()
 option_params = {'K': 100,
                  'B_up': 200}
 
-dt = 0.0001
+dt = 0.001
 
 option_pricer = OptionPricer(100, 0.05, 0.4, 1, dt, antithetic=True)
-deltas, d_l, d_u = option_pricer.calculate_delta_likelihood_ratio('UpAndOutCall', 50000, **option_params)
+deltas, d_l, d_u = option_pricer.calculate_vega_likelihood_ratio('UpAndOutCall', 500000, **option_params)
 print(np.mean(deltas))
 print (d_l, d_u)
 

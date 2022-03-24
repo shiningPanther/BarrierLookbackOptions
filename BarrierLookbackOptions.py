@@ -55,6 +55,54 @@ class OptionPricer:
         deltas_mean = deltas.mean()
         return deltas_mean, deltas_mean + d_l, deltas_mean + d_u
 
+    def calculate_vega_likelihood_ratio(self, option_type, N, **kwargs):
+        def transform_variables(variables):
+            sum = 0
+            for variable in variables:
+                sum += (variable**2-1)/self.sigma-np.sqrt(self.dt)*variable
+            return sum
+
+        if option_type not in self.possible_option_types:
+            print('Invalid option type')
+            return
+        deltas = np.zeros(N)
+        for i in tqdm(range(N)):
+            paths = self._simulate_one_path()
+            payoff1 = self._get_payoff(paths[0], option_type, **kwargs)
+            payoff2 = self._get_payoff(paths[1], option_type, **kwargs)
+            delta1 = payoff1*transform_variables(self.rvs[-2])
+            delta2 = payoff2*transform_variables(self.rvs[-1])
+            deltas[i] = delta1
+            deltas[i] = delta2
+        deltas *= self.discount
+        d_l, d_u = self._bootstrap(deltas)
+        deltas_mean = deltas.mean()
+        return deltas_mean, deltas_mean + d_l, deltas_mean + d_u
+
+    def calculate_gamma_likelihood_ratio(self, option_type, N, **kwargs):
+        def transform_variable(z):
+            term1 = (z**2 - 1)/(self.s0**2*self.sigma**2*self.dt)
+            term2 = (z)/(self.s0**2*self.sigma*np.sqrt(self.dt))
+            return term1-term2
+        
+        if option_type not in self.possible_option_types:
+            print('Invalid option type')
+            return
+
+        deltas = np.zeros(N)
+        for i in tqdm(range(N)):
+            paths = self._simulate_one_path()
+            payoff1 = self._get_payoff(paths[0], option_type, **kwargs)
+            payoff2 = self._get_payoff(paths[1], option_type, **kwargs)
+            delta1 = payoff1*transform_variable(self.rvs[-2][0])
+            delta2 = payoff2*transform_variable(self.rvs[-1][0])
+            deltas[i] = delta1
+            deltas[i] = delta2
+        deltas *= self.discount
+        d_l, d_u = self._bootstrap(deltas)
+        deltas_mean = deltas.mean()
+        return deltas_mean, deltas_mean + d_l, deltas_mean + d_u
+
     def calculate_delta_finite_difference(self, option_type, N, dS0, **kwargs):
         if option_type not in self.possible_option_types:
             print('Invalid option type')
