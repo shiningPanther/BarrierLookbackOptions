@@ -306,6 +306,95 @@ class OptionPricer:
 
 
     
+N = 10_000
+option_params = {'K': 100,
+                 'B_up': 200,
+                 'B_down': 80}
+
+np.random.seed(0)
+option_type = 'LookBackCall'
+
+
+def plot_fill_plot(x_vals, y_vals, ax):
+    y_mid = [y_val[0] for y_val in y_vals]
+    y_up = [y_val[1] for y_val in y_vals]
+    y_down = [y_val[2] for y_val in y_vals]
+    ax.plot(x_vals, y_mid)
+    ax.fill_between(x_vals, y_up, y_down, color='blue', alpha=0.1)
+
+    
+
+dt_arr = np.logspace(-5, -2, 12)
+prices = []
+for dt in tqdm(dt_arr):
+    option = OptionPricer(s0=100, r=0.05, sigma=0.4, T=1, dt=dt)
+    prices.append(option.calculate_price(option_type, N, **option_params))
+
+fig, ax = plt.subplots()
+plot_fill_plot(dt_arr, prices, ax)
+ax.hlines(10.8842, 1e-5, 1e-2, color='green', linestyle='dashed')
+ax.set_xscale('log')
+
+option = OptionPricer(s0=100, r=0.05, sigma=0.4, T=1, dt=0.0001)
+dS0_arr = np.logspace(-2, 2, 13)
+deltas = []
+for dS0 in tqdm(dS0_arr):
+    deltas.append(option.calculate_delta(option_type, N, dS0=dS0, **option_params))
+
+fig, ax = plt.subplots()
+plot_fill_plot(dS0_arr, deltas, ax)
+ax.hlines(0.2289, 1e-2, 1e2, color='green', linestyle='dashed')
+ax.set_xscale('log')
+
+dS0_arr = np.logspace(-2, 2, 13)
+gammas = []
+for dS0 in tqdm(dS0_arr):
+    gammas.append(option.calculate_gamma(option_type, N, dS0=dS0, **option_params))
+
+fig, ax = plt.subplots()
+plot_fill_plot(dS0_arr, gammas, ax)
+ax.hlines(-0.0050, 1e-2, 1e2, color='green', linestyle='dashed')
+ax.set_xscale('log')
+
+dsigma_arr = np.logspace(-3, -1, 10)
+vegas = []
+for dsigma in tqdm(dsigma_arr):
+    vegas.append(option.calculate_vega(option_type, N, dsigma=dsigma, **option_params))
+
+fig, ax = plt.subplots()
+plot_fill_plot(dsigma_arr, vegas, ax)
+ax.hlines(-20.09, 1e-3, 1e-1, color='green', linestyle='dashed')
+ax.set_xscale('log')
+
+fig, ax = plt.subplots(1,4,figsize=(14,8))
+plot_fill_plot(dt_arr, prices, ax[0])
+# ax[0].hlines(10.8842, 1e-5, 1e-2, color='green', linestyle='dashed')
+ax[0].set_xscale('log')
+plot_fill_plot(dS0_arr, deltas, ax[1])
+# ax[1].hlines(0.2289, 1e-2, 1e2, color='green', linestyle='dashed')
+ax[1].set_xscale('log')
+plot_fill_plot(dS0_arr, gammas, ax[2])
+# ax[2].hlines(-0.0050, 1e-2, 1e2, color='green', linestyle='dashed')
+ax[2].set_xscale('log')
+plot_fill_plot(dsigma_arr, vegas, ax[3])
+# ax[3].hlines(-20.09, 1e-3, 1e-1, color='green', linestyle='dashed')
+ax[3].set_xscale('log')
+
+ax[0].set_ylabel('price'); ax[0].set_xlabel('dt'); ax[0].set_title('price')
+ax[1].set_ylabel('delta'); ax[1].set_xlabel('d$S_0$'); ax[1].set_title('delta')
+ax[2].set_ylabel('gamma'); ax[2].set_xlabel('d$S_0$'); ax[2].set_title('gamma')
+ax[3].set_ylabel('vega'); ax[3].set_xlabel('d$\sigma$'); ax[3].set_title('vega')
+
+plt.tight_layout()
+fig.savefig(f'{option_type}.pdf', format='pdf')
+
+asdf
+
+
+prices = option.calculate_price('UpAndOutCall', N, **option_params)
+deltas = option.calculate_delta('UpAndOutCall', N, dS0=1, **option_params)
+gammas = option.calculate_gamma('UpAndOutCall', N, dS0=1, **option_params)
+vegas = option.calculate_vega('UpAndOutCall', N, dsigma=0.1, **option_params)
 
 
 
